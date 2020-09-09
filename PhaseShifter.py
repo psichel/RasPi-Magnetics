@@ -12,7 +12,7 @@
 from Adafruit_I2C import Adafruit_I2C
 import smbus
 import time
-from Si5351 import Si5351
+from Si5351_clock import Si5351
 
 # MCP23017 Datasheet
 # http://ww1.microchip.com/downloads/en/DeviceDoc/20001952C.pdf
