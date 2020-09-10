@@ -75,9 +75,9 @@ class MagneticSensor:
 		magSample = {'x':xMag, 'y':yMag, 'z':zMag}
 		return magSample
 
-		'''print ("Magnetic field in X-Axis : %d" %xMag)
-		print ("Magnetic field in Y-Axis : %d" %yMag)
-		print ("Magnetic field in Z-Axis : %d" %zMag)'''
+		# print ("Magnetic field in X-Axis : %d" %xMag)
+		# print ("Magnetic field in Y-Axis : %d" %yMag)
+		# print ("Magnetic field in Z-Axis : %d" %zMag)
 
 if __name__ == '__main__':
 		# Pin Setup:

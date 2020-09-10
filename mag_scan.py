@@ -14,13 +14,17 @@ MIT Open Source License
 https://opensource.org/licenses/MIT
 """
 
-import os
 import atexit
-import time, threading
+import os
+import threading
+import time
+
 import RPi.GPIO as GPIO
-from mag_sensor import MagneticSensor
-from Si5351_clock import Si5351
+
 from PhaseShifter import PhaseShifter
+from Si5351_clock import Si5351
+from mag_sensor import MagneticSensor
+from mag_scan_info import ScanInfo
 
 GPIO.setwarnings(False)
 
@@ -340,6 +344,7 @@ paramsD = {'si': si, 'mag': mag, 'phaseShifterIO_Clk1': phaseShifterIO_Clk1, 'ph
            'phaseClk1': 0, 'phaseClk2': 0, 'durationStart': 0.050, 'durationEnd': 0.50,
            'fStart': 30000, 'fEnd': 40000,
            'index': 0, 'magSamples': magSamples, 'doReadSensor': False, 'loop': True}
+scan_state = ScanInfo()
 # paramsD is a dictionary of test parameters passed from step to step.
 # This allows asynchronous processing and also simplifies specifying multiple tests compactly.
 # si and mag are controller ojects for Si5351 clock generator and MAG3110 magnetic sensor
