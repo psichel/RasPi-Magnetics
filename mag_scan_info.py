@@ -12,6 +12,10 @@ class ScanInfo(object):
     test stages
     """
     def __init__(self):
+        # which test to run
+        self.test_config = None
+        self.test_update_parameters = None
+
         # hardware device instances
         self.si = None
         self.mag_sensor = None
@@ -21,8 +25,8 @@ class ScanInfo(object):
         # properties representing current test state
         self.frequency_start = 10000  # scan range start (Hz)
         self.frequency_end = 40000    # scan range end
-        self.base_frequency = self.frequency_start
-        self.call_method_after_delay = self.frequency_start
+        self.base_frequency = self.frequency_start  # the base frequency we're currently scanning
+        self.offset_frequency = self.frequency_start   # offset from base for 2nd magnetic axis
         self.frequency_step = 1  # frequency step for subsequent scan
         self.clock1_phase_offset = 0  # initial phase for clock 1 (relative to clock 0)
         self.clock2_phase_offset = 0  # initial phase for clock 2 (relative to clock 0)
@@ -31,7 +35,7 @@ class ScanInfo(object):
         self.duration_now = self.duration_start
         self.duration_step = 0.010
         self.cycle_count = 0          # number of test cycles so far
-        self.cycle_of_last_write = 0  # Remember last time we wrote a sample to disk.
+        self.cycle_last_interval = 0  # Remember start of cycle interval
         self.cycle_pause = 0.9        # seconds before starting next cycle
         self.mag_samples = []         # frequency and magnetic field readings
         self.do_read_sensor = False   # read magnetic sensor
