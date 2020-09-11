@@ -5,8 +5,8 @@ using a custom high speed motor driver.
 This example will scan a range of frequencies and phase
 relationships along 3 axes (X, Y, Z).
 
-A Silicon Labs Si5351 programable clock generator and
-custom designed frequency indendendent digital phase shifter is used.
+A Silicon Labs Si5351 programmable clock generator and
+custom designed frequency independent digital phase shifter is used.
 
 Author Peter Sichel
 Copyright (c) 2018, Sustainable Softworks Inc
@@ -24,7 +24,7 @@ import RPi.GPIO as GPIO
 from PhaseShifter import PhaseShifter
 from Si5351_clock import Si5351
 from mag_sensor import MagneticSensor
-from mag_scan_info import ScanInfo
+from mag_scan_info import ScanInfo, MagSample
 
 GPIO.setwarnings(False)
 
@@ -60,322 +60,293 @@ atexit.register(turn_off_magnets)
 
 
 # call function after a delay
-def callMethodWithParamsAfterDelay(method=None, params=[], seconds=0.0):
+def call_method_after_delay(method=None, params=None, seconds=0.0):
+    if params is None:
+        params = []
     return threading.Timer(seconds, method, params).start()
 
 
-def cancelDelayedCall(inTimer):
-    inTimer.cancel()
+def cancel_delayed_call(timer):
+    timer.cancel()
 
 
-### Support
-def setClocks(fX, fY, fZ, si):
-    # If we always use pll A, don't want to keep reseting it.
+# = Support
+def set_clocks(fx, fy, fz, si):
+    # If we always use pll A, don't want to keep resetting it.
     pll = 0
-    if (fX > 0):
-        si.setFrequency(clock=0, pll=pll, targetFrequency=fX)  # X axis
+    if fx > 0:
+        si.setFrequency(clock=0, pll=pll, targetFrequency=fx)  # X axis
     else:
         si.disableOutput(0)  # disable clock 0
-    if (fY > 0):
-        si.setFrequency(clock=1, pll=pll, targetFrequency=fY)  # Y axis
+    if fy > 0:
+        si.setFrequency(clock=1, pll=pll, targetFrequency=fy)  # Y axis
     else:
         si.disableOutput(1)  # disable clock 1
-    if (fZ > 0):
-        si.setFrequency(clock=2, pll=pll, targetFrequency=fZ)  # Z axis
+    if fz > 0:
+        si.setFrequency(clock=2, pll=pll, targetFrequency=fz)  # Z axis
     else:
         si.disableOutput(2)  # disable clock 2
 
 
-def setPhase1(paramsD):
+def set_phase1(scan_info):
     # Clock signals 1 and 2 are set to 180 times the base frequency (Clk0)
     # and then counted down to adjust the phase.
     # The clock phase parameter is in degrees 0 to 360. 
     # Odd values invert the clock to shift a half cycle.
-    phaseShifterIO_Clk1 = paramsD['phaseShifterIO_Clk1']
-    degrees = paramsD['phaseClk1']
-    si = paramsD['si']
-
+    degrees = scan_info.clock1_phase_offset
     offset = degrees / 2
     invert = degrees % 2
-    turnOnAt = offset % 240
-    turnOffAt = (offset + 120) % 240  # +120 is 50% duty cycle of 240
-    phaseShifterIO_Clk1.setA(turnOnAt)
-    phaseShifterIO_Clk1.setB(turnOffAt)
-    if (invert):
-        si.invertOutput(invert=True, channel=1)
+    turn_on_at = offset % 240
+    turn_off_at = (offset + 120) % 240  # +120 is 50% duty cycle of 240
+    scan_info.phase_shifter1.setA(turn_on_at)
+    scan_info.phase_shifter1.setB(turn_off_at)
+    if invert:
+        scan_info.si.invertOutput(invert=True, channel=1)
 
 
-def setPhase2(paramsD):
+def set_phase2(scan_info):
     # Clock signals 1 and 2 are set to 180 times the base frequency (Clk0)
     # and then counted down to adjust the phase.
     # The clock phase parameter is in degrees 0 to 360. 
     # Odd values invert the clock to shift a half cycle.
-    phaseShifterIO_Clk2 = paramsD['phaseShifterIO_Clk2']
-    degrees = paramsD['phaseClk2']
-    si = paramsD['si']
-
+    degrees = scan_info.clock2_phase_offset
     offset = degrees / 2
     invert = degrees % 2
-    turnOnAt = offset % 240
-    turnOffAt = (offset + 120) % 240
-    phaseShifterIO_Clk2.setA(turnOnAt)
-    phaseShifterIO_Clk2.setB(turnOffAt)
-    if (invert):
-        si.invertOutput(invert=True, channel=2)
+    turn_on_at = offset % 240
+    turn_off_at = (offset + 120) % 240
+    scan_info.phase_shifter2.setA(turn_on_at)
+    scan_info.phase_shifter2.setB(turn_off_at)
+    if invert:
+        scan_info.si.invertOutput(invert=True, channel=2)
 
 
-### Test Cases
-def test_1(paramsD):
+# = Test Cases
+def test_1(scan_info):
     # scan frequencies on one or more axis
-    if (paramsD['index'] == 0):
+    if scan_info.cycle_count == 0:
         print('Initialize for test_1')
-        paramsD['fBase'] = 20000
-        paramsD['fDelta'] = 2
-        paramsD['fEnd'] = 50000
+        scan_info.base_frequency = 20000
+        scan_info.frequency_step = 2
+        scan_info.frequency_end = 50000
     # set frequencies, 0=off
-    fBase = paramsD['fBase']
-    fX = 0
-    fY = fBase
-    fZ = 0
-    paramsD['fX'] = fX
-    paramsD['fY'] = fY
-    paramsD['fZ'] = fZ
-    si = paramsD['si']
-    setClocks(fX, fY, fZ, si)
+    fx = 0
+    fy = scan_info.base_frequency
+    fz = 0
+    scan_info.fx = fx
+    scan_info.fy = fy
+    scan_info.fz = fz
+    set_clocks(fx, fy, fz, scan_info.si)
 
 
-def test_2(paramsD):
+def test_2(scan_info):
     # scan frequencies on two axis with inverted clocks and offset
-    index = paramsD['index']
-    if (index == 0):
+    if scan_info.cycle_count == 0:
         print('Initialize for test_2')
         turn_off_magnets()
-        paramsD['fStart'] = 22000
-        paramsD['fEnd'] = 25000
-        paramsD['fBase'] = paramsD['fStart']
-        paramsD['fDelta'] = 1
-        paramsD['phaseClk1'] = 0
-        paramsD['phaseClk2'] = 0
-        paramsD['durationStart'] = 1.0
-        paramsD['durationEnd'] = 1.0
-        paramsD['duration'] = paramsD['durationStart']
-        paramsD['durationDelta'] = 0.010
-        paramsD['space'] = 0.9
-        paramsD['indexPrevious'] = 0  # print samples every N steps
+        scan_info.frequency_start = 22000
+        scan_info.frequency_end = 25000
+        scan_info.base_frequency = scan_info.frequency_start
     # set frequencies, 0=off
-    fBase = paramsD['fBase']
-    fX = fBase
-    fY = 0
-    fZ = fBase
-    paramsD['fX'] = fX
-    paramsD['fY'] = fY
-    paramsD['fZ'] = fZ
-    si = paramsD['si']
-    setClocks(fX, fY * 240, fZ * 240, si)
+    fx = scan_info.base_frequency
+    fy = 0
+    fz = scan_info.base_frequency
+    scan_info.fx = fx
+    scan_info.fy = fy
+    scan_info.fz = fz
+    set_clocks(fx, fy * 240, fz * 240, scan_info.si)
     # si.invertOutput(invert=True, channel=0)
-    setPhase1(paramsD)
-    setPhase2(paramsD)
+    set_phase1(scan_info)
+    set_phase2(scan_info)
     # GPIO.output(IN_Y, False)
     # GPIO.output(ENABLE_Y, True)
 
 
-def test_3(paramsD):
+def test_3(scan_info):
     # scan with harmonics
-    if (paramsD['index'] == 0):
+    if scan_info.cycle_count == 0:
         print('Initialize for test_3')
-        paramsD['fBase'] = 50000
-        paramsD['fDelta'] = 2
-        paramsD['fEnd'] = 150000
-        paramsD['duration'] = 0.5
-        paramsD['durationEnd'] = 0.5
+        scan_info.base_frequency = 50000
+        scan_info.frequency_step = 2
+        scan_info.frequency_end = 150000
+        scan_info.duration_now = 0.5
+        scan_info.duration_end = 0.5
     # set frequencies, 0=off
-    fBase = paramsD['fBase']
-    fX = 3 * fBase
-    fY = 3 * fBase
-    fZ = fBase
-    paramsD['fX'] = fX
-    paramsD['fY'] = fY
-    paramsD['fZ'] = fZ
-    si = paramsD['si']
-    setClocks(fX, fY, fZ, si)
-    si.invertOutput(invert=True, channel=1)
+    fx = 3 * scan_info.base_frequency
+    fy = 3 * scan_info.base_frequency
+    fz = scan_info.base_frequency
+    scan_info.fx = fx
+    scan_info.fy = fy
+    scan_info.fz = fz
+    set_clocks(fx, fy, fz, scan_info.si)
+    scan_info.si.invertOutput(invert=True, channel=1)
 
 
-### scanning sequence
-def sendBurst(paramsD):
+# = scanning sequence
+def send_burst(scan_info):
     # initiate burst for selected test
-    test_2(paramsD)
-    duration = paramsD['duration']
-    mSec = duration - 0.001  # setup to read sensor 1ms before end of burst
+    test_2(scan_info)
+    m_second = scan_info.duration_now - 0.001  # setup to read sensor 1ms before end of burst
     # chain for next step
-    callMethodWithParamsAfterDelay(method=readSensor1, params=[paramsD], seconds=mSec)
+    call_method_after_delay(method=read_sensor1, params=[scan_info], seconds=m_second)
 
 
-def readSensor1(paramsD):
+def read_sensor1(scan_info):
     # read MAG3110 sensor to initialize for a new measurement
-    magSample = paramsD['mag'].readMagneticField()
-    paramsD['doReadSensor'] = True  # read again when ready interrupt fires
-    magSample['fX'] = paramsD['fX']
-    magSample['fY'] = paramsD['fY']
-    magSample['fZ'] = paramsD['fZ']
+    x, y, z = scan_info.mag_sensor.readMagneticField()
+    sample = MagSample(x, y, z)
+    scan_info.do_read_sensor = True  # read again when ready interrupt fires
+    sample.fx = scan_info.fx
+    sample.fy = scan_info.fy
+    sample.fz = scan_info.fz
     # chain for next step after 1ms to finish burst interval
-    callMethodWithParamsAfterDelay(method=endBurst, params=[paramsD], seconds=0.001)
+    call_method_after_delay(method=end_burst, params=[scan_info], seconds=0.001)
 
 
-def endBurst(paramsD):
-    si.enableOutputs(False)
-    space = paramsD['space']  # space between bursts
-    # callMethodWithParamsAfterDelay(method=readSensor2, params=[paramsD], seconds=0.012)
-    callMethodWithParamsAfterDelay(method=updateParameters, params=[paramsD], seconds=space)
+def end_burst(scan_info):
+    scan_info.si.enableOutputs(False)
+    # call_method_after_delay(method=read_sensor2, params=[scan_info], seconds=0.012)
+    call_method_after_delay(method=update_parameters, params=[scan_info], seconds=scan_info.cycle_pause)
 
 
-def readSensor2(paramsD):
-    # print("readSensor2")
-    magSample = paramsD['mag'].readMagneticField()
-    magSample['fX'] = paramsD['fX']  # include frequency with sample
-    magSample['fY'] = paramsD['fY']
-    magSample['fZ'] = paramsD['fZ']
-    magSample['fBase'] = paramsD['fBase']
-    magSample['duration'] = paramsD['duration']
-    magSamples = paramsD['magSamples']
-    magSamples.append(magSample)
-    index = paramsD['index']
-    indexPrevious = paramsD['indexPrevious']
-    if (index - indexPrevious > 10):
+def read_sensor2(scan_info):
+    # print("read_sensor2")
+    x, y, z = scan_info.mag_sensor.readMagneticField()
+    sample = MagSample(x, y, z)
+    sample.fx = scan_info.fx  # include frequency with sample
+    sample.fy = scan_info.fy
+    sample.fz = scan_info.fz
+    sample.base_frequency = scan_info.base_frequency
+    sample.duration = scan_info.duration_now
+    scan_info.mag_samples.append(sample)
+    if scan_info.cycle_count - scan_info.cycle_of_last_write > 10:
         # print(magSample)
-        offset = float(paramsD['phaseClk1']) * 180 / 240
-        print('duration:%.2f,fX:%d, fY:%d, fZ:%d, magX:%d, magY:%d, magZ:%d' % (
-        magSample['duration'], magSample['fX'], magSample['fY'], magSample['fZ'],
-        magSample['x'], magSample['y'], magSample['z']))
-        print('phase1:%.2f degrees\n' % (offset))
-        paramsD['indexPrevious'] = index
-    # updateParameters(paramsD)
+        offset = float(scan_info.clock1_phase_offset) * 180 / 240
+        print('duration:%.2f,fx:%d, fy:%d, fz:%d, magX:%d, magY:%d, magZ:%d' % (
+            sample.duration, sample.fx, sample.fy, sample.fz,
+            sample.x, sample.y, sample.z))
+        print('phase1:%.2f degrees\n' % offset)
+        scan_info.cycle_of_last_write = scan_info.cycle_count
+    # update_parameters(scan_info)
 
 
-def updateParameters(paramsD):
-    # Get current parameters
-    fBase = paramsD['fBase']  # frequency
-    fDelta = paramsD['fDelta']  # delta frequency increment amount
-    phaseClk1 = paramsD['phaseClk1']
-    phaseClk2 = paramsD['phaseClk2']
-    duration = paramsD['duration']
-    durationDelta = paramsD['durationDelta']
-    index = paramsD['index']
-    index += 1
-    paramsD['index'] = index
-    # not updated
-    fStart = paramsD['fStart']
-    fEnd = paramsD['fEnd']
-    durationStart = paramsD['durationStart']
-    durationEnd = paramsD['durationEnd']
-
-    phaseClk1 += 1
-    phaseClk2 += 1
-    if (phaseClk2 < 240):
+def update_parameters(scan_info):
+    scan_info.cycle_count += 1
+    scan_info.clock1_phase_offset += 1
+    scan_info.clock2_phase_offset += 1
+    if scan_info.clock2_phase_offset < 240:
         # For this test, we only need to shift 180 degrees
         # to cover every phase relationship between two clock signals
-        # Note we doulbe the number of counts per cycle by inverting 
+        # Note we double the number of counts per cycle by inverting
         # the clock every other step.
-        callMethodWithParamsAfterDelay(method=sendBurst, params=[paramsD], seconds=0.001)
+        call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
 
-    elif (duration < durationEnd):
-        duration += durationDelta
+    elif scan_info.duration_now < scan_info.duration_end:
+        scan_info.duration_now += scan_info.duration_step
         # repeat burst sequence
-        callMethodWithParamsAfterDelay(method=sendBurst, params=[paramsD], seconds=0.001)
+        call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
     else:
-        duration = durationStart
-        if (fBase < fEnd):
-            fBase += fDelta
+        scan_info.duration_now = scan_info.duration_start
+        if scan_info.base_frequency < scan_info.frequency_end:
+            scan_info.base_frequency += scan_info.frequency_step
             # repeat burst sequence after 1ms
-            callMethodWithParamsAfterDelay(method=sendBurst, params=[paramsD], seconds=0.001)
+            call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
         else:
-            paramsD['loop'] = False
+            scan_info['loop'] = False
             print('Sequence completed')
     # save updated parameters
-    paramsD['fBase'] = fBase
-    paramsD['duration'] = duration
-    paramsD['phaseClk1'] = phaseClk1 % 240
-    paramsD['phaseClk2'] = phaseClk2 % 240
+    scan_info.clock1_phase_offset %= 240
+    scan_info.clock2_phase_offset %= 240
 
-    if (index % 1000 == 0) or (paramsD['loop'] == False):
-        # saveSamples(paramsD)
-        magSamples = paramsD['magSamples']
-        magSamples = []
-        paramsD['magSamples'] = magSamples
-        print('Mag samples cleared')
+    if (scan_info.cycle_count % 1000 == 0) or (not scan_info.run_next_test_cycle):
+        save_samples(scan_info)
 
 
-def saveSamples(paramsD):
+def save_samples(scan_info):
     # Save the data we collected
-    magSamples = paramsD['magSamples']
+    samples = scan_info.mag_samples
     fh = open('mag_profile.csv', 'a')
-    for magSample in magSamples:
+    for sample in samples:
         fh.write('%d,%.2f,%d,%d,%d,%d,%d,%d\n' % (
-        magSample['fBase'], magSample['duration'], magSample['fX'], magSample['fY'], magSample['fZ'],
-        magSample['x'], magSample['y'], magSample['z']))
-        # reset dictionary to collect more
-        magSamples = []
-        paramsD['magSamples'] = magSamples
+            sample.base_frequency, sample.duration, sample.fx, sample.fy, sample.fz,
+            sample.x, sample.y, sample.z))
+        # reset samples array to collect more
+        scan_info.mag_samples = []
     fh.close()
     print('file saved')
 
 
-def mag_event_callback(pin):
-    # print("Mag Event")
-    if (paramsD['doReadSensor']):
-        paramsD['doReadSensor'] = False
-        readSensor2(paramsD)
+class ReadSensorEvents(object):
+    def __init__(self, scan_info):
+        self.scan_info = scan_info
 
+    def setup(self):
+        # Setup to read when MAG3110 is ready.
+        GPIO.setup(MAG_READY_PIN, GPIO.IN)  # MAG3110 ready interrupt
+        GPIO.add_event_detect(MAG_READY_PIN, GPIO.RISING, callback=self.callback)
+        # GPIO.remove_event_detect(MAG_READY_PIN)
+
+    def callback(self, pin):
+        # print("Mag Event")
+        if self.scan_info.do_read_sensor:
+            self.scan_info.do_read_sensor = False
+            read_sensor2(self.scan_info)
+
+    def cleanup(self):
+        GPIO.remove_event_detect(MAG_READY_PIN)
 
 #
 # Main Program to run test sequence
-#
-print("Start")
-if os.path.isfile("mag_profile.csv"):
-    os.remove("mag_profile.csv")
-    print("Previous mag_profile.csv removed!")
-si = Si5351()
-mag = MagneticSensor()
-phaseShifterIO_Clk1 = PhaseShifter()
-phaseShifterIO_Clk2 = PhaseShifter(address=0x21)
-magSamples = []
-si.enableOutputs(False)  # turn off all outputs
-paramsD = {'si': si, 'mag': mag, 'phaseShifterIO_Clk1': phaseShifterIO_Clk1, 'phaseShifterIO_Clk2': phaseShifterIO_Clk2,
-           'phaseClk1': 0, 'phaseClk2': 0, 'durationStart': 0.050, 'durationEnd': 0.50,
-           'fStart': 30000, 'fEnd': 40000,
-           'index': 0, 'magSamples': magSamples, 'doReadSensor': False, 'loop': True}
-scan_state = ScanInfo()
-# paramsD is a dictionary of test parameters passed from step to step.
-# This allows asynchronous processing and also simplifies specifying multiple tests compactly.
-# si and mag are controller ojects for Si5351 clock generator and MAG3110 magnetic sensor
-# fx, fy, fz are frequencies for each magnetic axis. 0 means disabled.
-# fEnd is the ending frequency. If frequencies are looped, fStart is the current resume frequency.
-# Duration is length of burst to send in seconds.
-# DurationEnd allows incrementing pulse duration until a limit is reached.
-# deltaX, deltaY, deltaZ (not specified here) is the frequency shift after each pulse sequence
-# index counts each test cycle
-# results are stored in array magSamples which is saved to disk periodically in file mag_profile.csv
-# doReadSenor is used to control when a sensor interrupt will read the magnetic field strength.
-# loop is used to indicate when the testing cycle has completed
-# setup to read when MAG3110 is ready.
-GPIO.setup(MAG_READY_PIN, GPIO.IN)  # MAG3110 ready interrupt
-GPIO.add_event_detect(MAG_READY_PIN, GPIO.RISING, callback=mag_event_callback)
-# GPIO.remove_event_detect(MAG_READY_PIN)
-sendBurst(paramsD)
 
-print("Press ^C to abort\n")
-fh = open('mag_profile.csv', 'a')
-fh.write("freq_base,duration,freq_x,freq_y,freq_z,mag_x,mag_y,mag_z\n")
-fh.close()
-while (paramsD['loop']):
-    print('.')
-    # check if we're done every 5 seconds
-    time.sleep(5.0)
 
-# cleanup
-GPIO.remove_event_detect(MAG_READY_PIN)
-si.enableOutputs(False)
-GPIO.output(ENABLE_X, False)
-GPIO.output(ENABLE_Y, False)
-GPIO.output(ENABLE_Z, False)
-print("End")
+def prepare_test_run():
+    # remove old data if any
+    if os.path.isfile("mag_profile.csv"):
+        os.remove("mag_profile.csv")
+        print("Previous mag_profile.csv removed!")
+
+    # write column headers to new csv output file
+    fh = open('mag_profile.csv', 'a')
+    fh.write("freq_base,duration,freq_x,freq_y,freq_z,mag_x,mag_y,mag_z\n")
+    fh.close()
+
+
+prepare_test_run()
+
+
+def run_test_sequence():
+    print("Starting test sequence")
+    print("Press ^C to abort\n")
+    scan_info = ScanInfo()
+    # assign devices
+    scan_info.si = Si5351()
+    scan_info.mag_sensor = MagneticSensor()
+    scan_info.phase_shifter1 = PhaseShifter()
+    scan_info.phase_shifter2 = PhaseShifter(address=0x21)
+    scan_info.mag_samples = []
+
+    # scan_info is an object containing the test parameters we pass from step to step.
+    # This allows asynchronous processing and also simplifies specifying multiple tests compactly.
+    # si and mag are controller objects for Si5351 clock generator and MAG3110 magnetic sensor
+    # fx, fy, fz are frequencies for each magnetic axis. 0 means disabled.
+    # results are stored as an array of MagSample objects which is saved to disk periodically in file mag_profile.csv
+    # see ScanInfo for a description of each parameter.
+
+    read_events = ReadSensorEvents(scan_info)
+    read_events.setup()
+
+    send_burst(scan_info)
+    while scan_info.run_next_test_cycle:
+        print('.')  # let user know testing is underway
+        # loop to check if we're done every 5 seconds
+        time.sleep(5.0)
+
+    # cleanup
+    read_events.cleanup()
+    scan_info.si.enableOutputs(False)
+    GPIO.output(ENABLE_X, False)
+    GPIO.output(ENABLE_Y, False)
+    GPIO.output(ENABLE_Z, False)
+    print("End")
+
+
+run_test_sequence()

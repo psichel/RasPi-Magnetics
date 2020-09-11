@@ -72,8 +72,7 @@ class MagneticSensor:
 			zMag = 0
 
 		# Return field strength reading
-		magSample = {'x':xMag, 'y':yMag, 'z':zMag}
-		return magSample
+		return (xMag, yMag, zMag)
 
 		# print ("Magnetic field in X-Axis : %d" %xMag)
 		# print ("Magnetic field in Y-Axis : %d" %yMag)

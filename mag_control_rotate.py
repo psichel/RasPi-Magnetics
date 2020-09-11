@@ -41,10 +41,10 @@ def turnOffMagnets():
 atexit.register(turnOffMagnets)
 
 # call function after a delay
-def callMethodWithParamsAfterDelay(method=None, params=[], seconds=0.0):
+def call_method_after_delay(method=None, params=[], seconds=0.0):
     return threading.Timer(seconds, method, params).start()
 
-def cancelDelayedCall(inTimer):
+def cancel_delayed_call(inTimer):
     inTimer.cancel()
 
 

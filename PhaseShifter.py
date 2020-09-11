@@ -10,7 +10,6 @@
 #
 
 from Adafruit_I2C import Adafruit_I2C
-import smbus
 import time
 from Si5351_clock import Si5351
 
@@ -48,7 +47,7 @@ class PhaseShifter(object):
         self.i2c.write8(MCP23017_GPIOB, value & 0xFF)
 
 
-def setClocks(fX, fY, fZ, si):
+def set_clocks(fX, fY, fZ, si):
     # If we always use pll A, don't want to keep reseting it.
     pll = 0
     if (fX > 0):
@@ -77,7 +76,7 @@ if __name__ == '__main__':
     # fX = 40000
     # fY = fX * 192
     # fZ = fX * 192
-    # setClocks(fX, fY, fZ, si)
+    # set_clocks(fX, fY, fZ, si)
     # for i in range(191):
     # 	#i = 2
     # 	# step through every phase: A=turn on count; B=turn off count
@@ -94,7 +93,7 @@ if __name__ == '__main__':
     # fX = 40000
     # fY = fX * 192
     # fZ = fX * 192
-    # setClocks(fX, fY, fZ, si)
+    # set_clocks(fX, fY, fZ, si)
     # for i in range(10):
     # 	ioxAB.setA(1)	# CLKs full on
     # 	ioxAB.setB(0)
@@ -112,7 +111,7 @@ if __name__ == '__main__':
     fX = 40000
     fY = fX * 192
     fZ = fX * 192
-    setClocks(fX, fY, fZ, si)
+    set_clocks(fX, fY, fZ, si)
     for i in range(10):
         # all on
         ioxAB.setA(72)  # Each different phase, lights on
@@ -126,4 +125,4 @@ if __name__ == '__main__':
         ioxCD.setB(96)
         time.sleep(3.0)
 
-print("io_expander done")
+    print("io_expander done")

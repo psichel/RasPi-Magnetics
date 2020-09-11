@@ -47,7 +47,7 @@ class IOExpander(object):
 	def setB(self, value):
 		self.i2c.write8(MCP23017_GPIOB, value & 0xFF)
 
-def setClocks(fX, fY, fZ, si):
+def set_clocks(fX, fY, fZ, si):
 	# If we always use pll A, don't want to keep reseting it.
 	pll = 0
 	if (fX > 0):
@@ -61,7 +61,6 @@ def setClocks(fX, fY, fZ, si):
 	else: si.disableOutput(2)  # disable clock 2 
 
 if __name__ == '__main__':
-
 	print ("io_expander start")
 	ioxAB = IOExpander()
 	ioxCD = IOExpander(address=0x21)
@@ -70,7 +69,7 @@ if __name__ == '__main__':
 		fX = 8000
 		fY = fX * 24
 		fZ = fX * 24
-		setClocks(fX, fY, fZ, si)
+		set_clocks(fX, fY, fZ, si)
 		for i in range(23):
 			#i = 2
 			# step through every phase: A=turn on count; B=turn off count
@@ -84,10 +83,10 @@ if __name__ == '__main__':
 
 	if (0):
 		fX = fY = fZ = 0
-		setClocks(fX, fY, fZ, si)
+		set_clocks(fX, fY, fZ, si)
 		ioxAB.setA(0xAA)
 		ioxAB.setB(0xAA)	# 6 is 1/4 cycle at 24 increments per cycle
 
 		ioxCD.setA(0xAA)	# 48 is 90 degrees at 192 increments per cycle
 		ioxCD.setB(0xAA)
-	print ("io_expander done")
+	print("io_expander done")

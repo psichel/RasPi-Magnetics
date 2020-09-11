@@ -29,10 +29,10 @@ YELLOW = 2
 GREEN = 3
 
 # call function after a delay
-def callMethodWithParamsAfterDelay(method=None, params=[], seconds=0.0):
+def call_method_after_delay(method=None, params=[], seconds=0.0):
     return threading.Timer(seconds, method, params).start()
 
-def cancelDelayedCall(inTimer):
+def cancel_delayed_call(inTimer):
     inTimer.cancel()
 
 class piTrafficLight:
@@ -121,12 +121,12 @@ class piTrafficLight:
         self.setStateForColor(OFF, inColor)
         self.sequenceTimer = None
         if callback is not None:
-            callMethodWithParamsAfterDelay(callback, [sequenceState], 0)
+            call_method_after_delay(callback, [sequenceState], 0)
         return
 
     def turnOnColorForDurationWithCallbackAndParam(self, inColor, inSeconds, callback=None, sequenceState=0):
         self.turnOnColor(inColor)
-        self.sequenceTimer = callMethodWithParamsAfterDelay(\
+        self.sequenceTimer = call_method_after_delay(\
             self.turnOffColorWithCallbackAndParam,\
             [inColor, callback, sequenceState], inSeconds)
         return
