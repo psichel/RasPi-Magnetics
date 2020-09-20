@@ -84,9 +84,9 @@ if __name__ == '__main__':
 	if (0):
 		fX = fY = fZ = 0
 		set_clocks(fX, fY, fZ, si)
-		ioxAB.setA(0xAA)
-		ioxAB.setB(0xAA)	# 6 is 1/4 cycle at 24 increments per cycle
+		ioxAB.set_a(0xAA)
+		ioxAB.set_b(0xAA)	# 6 is 1/4 cycle at 24 increments per cycle
 
-		ioxCD.setA(0xAA)	# 48 is 90 degrees at 192 increments per cycle
-		ioxCD.setB(0xAA)
+		ioxCD.set_a(0xAA)	# 48 is 90 degrees at 192 increments per cycle
+		ioxCD.set_b(0xAA)
 	print("io_expander done")

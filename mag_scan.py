@@ -89,40 +89,6 @@ def set_clocks(fx, fy, fz, si):
         si.disableOutput(2)  # disable clock 2
 
 
-def set_phase1(scan_info):
-    # Clock signals 1 and 2 are set to 240 times the base frequency (Clk0)
-    # and then counted down to adjust the phase.
-    # The clock phase parameter is in degrees 0 to 360. 
-    # Odd values invert the clock to shift a half cycle.
-    degrees = scan_info.clock1_phase_offset
-    count_of_240 = int(degrees * 240 / 360)  # convert 0-360 degrees to 0-240 increments.
-    offset = count_of_240 / 2
-    invert = count_of_240 % 2
-    turn_on_at = offset % 240
-    turn_off_at = (offset + 120) % 240  # +120 is 50% duty cycle of 240
-    scan_info.phase_shifter1.setA(turn_on_at)
-    scan_info.phase_shifter1.setB(turn_off_at)
-    if invert:
-        scan_info.si.invertOutput(invert=True, channel=1)
-
-
-def set_phase2(scan_info):
-    # Clock signals 1 and 2 are set to 240 times the base frequency (Clk0)
-    # and then counted down to adjust the phase.
-    # The clock phase parameter is in degrees 0 to 360. 
-    # Odd values invert the clock to shift a half cycle.
-    degrees = scan_info.clock2_phase_offset
-    count_of_240 = int(degrees * 240 / 360)  # convert 0-360 degrees to 0-240 increments.
-    offset = count_of_240 / 2
-    invert = count_of_240 % 2
-    turn_on_at = offset % 240
-    turn_off_at = (offset + 120) % 240
-    scan_info.phase_shifter2.setA(turn_on_at)
-    scan_info.phase_shifter2.setB(turn_off_at)
-    if invert:
-        scan_info.si.invertOutput(invert=True, channel=2)
-
-
 # = Test Cases
 def test_config_1(scan_info):
     # scan frequencies on one or more axis
@@ -148,13 +114,17 @@ def test_config_2(scan_info):
         # use line below if we need to resume at a different frequency
         # scan_info.frequency_start = 22000
     # set frequencies, 0=off
-    scan_info.fx = scan_info.base_frequency
-    scan_info.fy = 0
-    scan_info.fz = scan_info.offset_frequency
-    set_clocks(scan_info.fx, scan_info.fy * 240, scan_info.fz * 240, scan_info.si)
+    fx = scan_info.fx = scan_info.base_frequency
+    fy = scan_info.fy = 0
+    fz = scan_info.fz = scan_info.offset_frequency
+    phase1 = scan_info.clock1_phase_offset
+    phase2 = scan_info.clock2_phase_offset
+    # phase offset
+    y_multiplier = scan_info.phase_shifter1.set_phase_count240(phase1, fx, fy)
+    z_multiplier = scan_info.phase_shifter2.set_phase_count240(phase2, fx, fz)
+    set_clocks(fx, fy * y_multiplier, fz * z_multiplier, scan_info.si)
     # si.invertOutput(invert=True, channel=0)
-    set_phase1(scan_info)
-    set_phase2(scan_info)
+
     # GPIO.output(IN_Y, False)
     # GPIO.output(ENABLE_Y, True)
 
@@ -192,14 +162,20 @@ def test_config_4(scan_info):
 def send_burst(scan_info):
     # initiate burst for selected test
     scan_info.test_config(scan_info)
-    m_second = scan_info.duration_now - 0.001  # setup to read sensor 1ms before end of burst
-    # chain for next step
+    # read sensor just before burst ends
+    m_second = scan_info.duration_now - 0.001
     call_method_after_delay(method=read_sensor1, params=[scan_info], seconds=m_second)
+    # end burst after requested interval
+    call_method_after_delay(method=end_burst, params=[scan_info], seconds=scan_info.duration_now)
 
 
 def end_burst(scan_info):
+    scan_info.phase_shifter1.clock_disable()
+    scan_info.phase_shifter2.clock_disable()
+    time.sleep(0.0001)    # allow phase shifter to count clocks off
     scan_info.si.enableOutputs(False)
     # call_method_after_delay(method=read_sensor2, params=[scan_info], seconds=0.012)
+    # update parameters for next test cycle after requested pause
     call_method_after_delay(method=scan_info.test_update_parameters, params=[scan_info], seconds=scan_info.cycle_pause)
 
 
@@ -207,12 +183,10 @@ def read_sensor1(scan_info):
     # read MAG3110 sensor to initialize for a new measurement
     x, y, z = scan_info.mag_sensor.readMagneticField()
     sample = MagSample(x, y, z)
-    scan_info.do_read_sensor = True  # read again when ready interrupt fires
+    scan_info.do_read_sensor = True  # read again (read_sensor2) when ready interrupt fires
     sample.fx = scan_info.fx
     sample.fy = scan_info.fy
     sample.fz = scan_info.fz
-    # chain for next step after 1ms to finish burst interval
-    call_method_after_delay(method=end_burst, params=[scan_info], seconds=0.001)
 
 
 def read_sensor2(scan_info):
@@ -222,13 +196,12 @@ def read_sensor2(scan_info):
     sample.fx = scan_info.fx  # include frequency with sample
     sample.fy = scan_info.fy
     sample.fz = scan_info.fz
-    sample.clock1_phase_offset = scan_info.clock1_phase_offset
-    sample.clock2_phase_offset = scan_info.clock2_phase_offset
+    sample.clock1_phase_offset = round(scan_info.clock1_phase_offset * 360 / 240)
+    sample.clock2_phase_offset = round(scan_info.clock2_phase_offset * 360 / 240)
     sample.duration = scan_info.duration_now
     scan_info.mag_samples.append(sample)
     if scan_info.cycle_count - scan_info.cycle_last_interval > 10:
         # print(sample)
-        offset = float(scan_info.clock1_phase_offset) * 180 / 240
         print('fx:%d, fy:%d, fz:%d, clock2_phase:%d, magX:%d, magY:%d, magZ:%d' % (
             sample.fx, sample.fy, sample.fz,
             sample.clock2_phase_offset, sample.x, sample.y, sample.z))
@@ -240,11 +213,9 @@ def test_update_parameters_2(scan_info):
     scan_info.cycle_count += 1
     scan_info.clock1_phase_offset += 1
     scan_info.clock2_phase_offset += 1
-    if scan_info.clock2_phase_offset <= 180:
-        # For this test, we only need to shift 180 degrees
+    if scan_info.clock2_phase_offset <= 120:
+        # For this test, we only need to shift 180 degrees (120 counts of 240)
         # to cover every phase relationship between two clock signals
-        # Note we double the number of counts per cycle by inverting
-        # the clock every other step.
         call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
 
     elif scan_info.duration_now < scan_info.duration_end:
@@ -271,29 +242,27 @@ def test_update_parameters_2(scan_info):
 
 def test_update_parameters_3(scan_info):
     scan_info.cycle_count += 1
-    scan_info.clock2_phase_offset += 30
     while True:
-        if scan_info.clock2_phase_offset <= 180:
-            # For this test, we only need to shift 180 degrees
+        scan_info.clock2_phase_offset += 20
+        if scan_info.clock2_phase_offset <= 120:
+            # For this test, we only need to shift 180 degrees (120 counts of 240)
             # to cover every phase relationship between two clock signals
-            # repeat burst sequence after 1ms
-            call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
             break
-        else:
-            scan_info.clock2_phase_offset = 0
-
         if scan_info.offset_frequency < 2 * scan_info.base_frequency:
             scan_info.offset_frequency += 1
-            call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
+            scan_info.clock2_phase_offset = 0
             break
         if scan_info.base_frequency < scan_info.frequency_end:
             scan_info.base_frequency += scan_info.frequency_step
             scan_info.offset_frequency = scan_info.base_frequency
-            call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
-        else:
-            scan_info.run_next_test_cycle = False
-            print('Sequence completed')
+            scan_info.clock2_phase_offset = 0
+            break
+        scan_info.run_next_test_cycle = False
+        print('Sequence completed')
+        break
 
+    if scan_info.run_next_test_cycle:
+        call_method_after_delay(method=send_burst, params=[scan_info], seconds=0.001)
     # save samples to disk after 1000 cycles
     if (scan_info.cycle_count % 1000 == 0) or (not scan_info.run_next_test_cycle):
         save_samples(scan_info)
@@ -355,26 +324,27 @@ def run_test_sequence():
     print("Starting test sequence")
     print("Press ^C to abort\n")
     scan_info = ScanInfo()
-    # configure which test to run
-    scan_info.test_config = test_config_3
-    scan_info.test_update_parameters = test_update_parameters_3
-    # assign devices
-    scan_info.si = Si5351()
-    scan_info.mag_sensor = MagneticSensor()
-    scan_info.phase_shifter1 = PhaseShifter()
-    scan_info.phase_shifter2 = PhaseShifter(address=0x21)
-    scan_info.mag_samples = []
-
     # scan_info is an object containing the test parameters we pass from step to step.
     # This allows asynchronous processing and also simplifies specifying multiple tests compactly.
     # si and mag are controller objects for Si5351 clock generator and MAG3110 magnetic sensor
     # fx, fy, fz are frequencies for each magnetic axis. 0 means disabled.
     # results are stored as an array of MagSample objects which is saved to disk periodically in file mag_profile.csv
     # see ScanInfo for a description of each parameter.
-
+    # assign devices
+    scan_info.si = Si5351()
+    scan_info.mag_sensor = MagneticSensor()
+    scan_info.phase_shifter1 = PhaseShifter()
+    scan_info.phase_shifter2 = PhaseShifter(address=0x21)
+    scan_info.mag_samples = []
+    # configure which test to run
+    scan_info.test_config = test_config_3
+    scan_info.test_update_parameters = test_update_parameters_3
+    # Set parameters to resume previous test
+    scan_info.base_frequency = 20001
+    scan_info.offset_frequency = 27104
+ 
     read_events = ReadSensorEvents(scan_info)
     read_events.setup()
-
     send_burst(scan_info)
     while scan_info.run_next_test_cycle:
         print('.')  # let user know testing is underway

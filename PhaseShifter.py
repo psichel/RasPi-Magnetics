@@ -1,7 +1,7 @@
 #!/usr/bin/python
 #
 # PhaseShifter.py - Uses MCP23017 IO Expander to control a
-# custom designed frequency indendendent digital phase shifter.
+# custom designed frequency independent digital phase shifter.
 #
 # Author: Peter Sichel 13-Jul-2019 
 # Copyright (c) 2018, Sustainable Softworks Inc
@@ -40,28 +40,66 @@ class PhaseShifter(object):
         self.i2c.write8(MCP23017_IODIRA, 0x00)  # all outputs on port A
         self.i2c.write8(MCP23017_IODIRB, 0x00)  # all outputs on port B
 
-    def setA(self, value):
+    def set_a(self, value):
         self.i2c.write8(MCP23017_GPIOA, value & 0xFF)
 
-    def setB(self, value):
+    def set_b(self, value):
         self.i2c.write8(MCP23017_GPIOB, value & 0xFF)
 
+    def set_phase_count240(self, phase_offset, clock_base, clock_output):
+        # Phase shift the corresponding output clock relative to Clk0.
+        # Assume the input clock is set to 240 times Clk0
+        # 240 was chosen because our max 8-bit count is 256.
+        # Assumes Clk1 and Clk2 are close to clock 0 since we only count up to 240.
+        # We count the number of 240x pulses to turn the output clock on (A side) and off (B side).
+        # The passed in phase shift is in counts of 240.
+        turn_on_at = phase_offset % 240
+        turn_off_at = (phase_offset + 120) % 240  # +120 is 50% duty cycle of 240
+        self.set_a(turn_on_at)
+        self.set_b(turn_off_at)
+        # Imagine the desired output clock is 2x Clk0.
+        # In this case counting 240x pulses will only let us turn on or off from 0-180 degrees of Clk0
+        # The solutions is to set the input clock to 120x Clk0
+        # so counting to 240 covers the entire range of Clk0.
+        # As the desired output frequency increases relative to Clk0, we lower the clock multiplier.
+        # The phase_offset parameter still specifies counts of 240.
+        # We can calculate the best fit clock multiplier as
+        clock_multiplier = 240  # default
+        if clock_output != 0:  # clock_output 0 indicates clock is off
+            clock_multiplier = int(float(clock_base) / float(clock_output) * 240)
+            # Debug
+            # print("\nset_phase_count240()")
+            # print('phase_offset: %d, clock_base: %d, clock_output: %d' %(phase_offset, clock_base, clock_output))
+            # print('turn_on_at: %d, turn_off_at: %d' %(turn_on_at, turn_off_at))
+            # print('clock_multiplier: %d' %clock_multiplier)
+        return clock_multiplier
+        # Example: clock_base = 10_000, clock_output = 15_000
+        # clock_multiplier = 160.  15_000 * 160 / 240 == 10_000
 
-def set_clocks(fX, fY, fZ, si):
-    # If we always use pll A, don't want to keep reseting it.
+    def clock_disable(self):
+        # Force the clock output to logical low value to turn off magnets.
+        # turn_off_at 1, turn_on_at 255 which should never be reached.
+        self.set_a(255)
+        self.set_b(1)
+
+
+def set_clocks(fx, fy, fz, clock_gen):
+    # This is used for testing phase shifter behavior below.
+    # The corresponding behavior is visible via the onboard LEDs.
+    # If we always use pll A, don't want to keep resetting it.
     pll = 0
-    if (fX > 0):
-        si.setFrequency(clock=0, pll=pll, targetFrequency=fX)  # X axis
+    if fx > 0:
+        clock_gen.setFrequency(clock=0, pll=pll, targetFrequency=fx)  # X axis
     else:
-        si.disableOutput(0)  # disable clock 0
-    if (fY > 0):
-        si.setFrequency(clock=1, pll=pll, targetFrequency=fY)  # Y axis
+        clock_gen.disableOutput(0)  # disable clock 0
+    if fy > 0:
+        clock_gen.setFrequency(clock=1, pll=pll, targetFrequency=fy)  # Y axis
     else:
-        si.disableOutput(1)  # disable clock 1
-    if (fZ > 0):
-        si.setFrequency(clock=2, pll=pll, targetFrequency=fZ)  # Z axis
+        clock_gen.disableOutput(1)  # disable clock 1
+    if fz > 0:
+        clock_gen.setFrequency(clock=2, pll=pll, targetFrequency=fz)  # Z axis
     else:
-        si.disableOutput(2)  # disable clock 2
+        clock_gen.disableOutput(2)  # disable clock 2
 
 
 if __name__ == '__main__':
@@ -114,15 +152,15 @@ if __name__ == '__main__':
     set_clocks(fX, fY, fZ, si)
     for i in range(10):
         # all on
-        ioxAB.setA(72)  # Each different phase, lights on
-        ioxAB.setB(120)
-        ioxCD.setA(144)
-        ioxCD.setB(24)
+        ioxAB.set_a(72)  # Each different phase, lights on
+        ioxAB.set_b(120)
+        ioxCD.set_a(144)
+        ioxCD.set_b(24)
         time.sleep(1.0)
-        ioxAB.setA(0)  # Same phase, light off
-        ioxAB.setB(96)
-        ioxCD.setA(0)
-        ioxCD.setB(96)
+        ioxAB.set_a(0)  # Same phase, light off
+        ioxAB.set_b(96)
+        ioxCD.set_a(0)
+        ioxCD.set_b(96)
         time.sleep(3.0)
 
     print("io_expander done")
