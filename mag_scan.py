@@ -101,28 +101,28 @@ def test_config_1(scan_info):
     fx = 0
     fy = scan_info.base_frequency
     fz = 0
-    scan_info.fx = fx
-    scan_info.fy = fy
-    scan_info.fz = fz
+    scan_info.f0 = fx
+    scan_info.f1 = fy
+    scan_info.f2 = fz
     set_clocks(fx, fy, fz, scan_info.si)
 
 
 def test_config_2(scan_info):
-    # scan frequencies on two axis with inverted clocks and offset
+    # scan frequencies on two axis with phase offset
     if scan_info.cycle_count == 0:
         print('Initialize test_config_2')
-        # use line below if we need to resume at a different frequency
+        # use lines below if we need to resume from a different starting point
         # scan_info.frequency_start = 22000
     # set frequencies, 0=off
-    fx = scan_info.fx = scan_info.base_frequency
-    fy = scan_info.fy = 0
-    fz = scan_info.fz = scan_info.offset_frequency
+    f0 = scan_info.f0 = scan_info.base_frequency
+    f1 = scan_info.f1 = 0
+    f2 = scan_info.f2 = scan_info.offset_frequency
     phase1 = scan_info.clock1_phase_offset
     phase2 = scan_info.clock2_phase_offset
     # phase offset
-    y_multiplier = scan_info.phase_shifter1.set_phase_count240(phase1, fx, fy)
-    z_multiplier = scan_info.phase_shifter2.set_phase_count240(phase2, fx, fz)
-    set_clocks(fx, fy * y_multiplier, fz * z_multiplier, scan_info.si)
+    scan_info.phase_shifter1.set_phase_count240(phase1)
+    scan_info.phase_shifter2.set_phase_count240(phase2)
+    set_clocks(f0, f1 * 240, f2 * 240, scan_info.si)
     # si.invertOutput(invert=True, channel=0)
 
     # GPIO.output(IN_Y, False)
@@ -130,12 +130,23 @@ def test_config_2(scan_info):
 
 
 def test_config_3(scan_info):
-    # Scan x while varying y from x to 2x
-    # for each y, test phase offsets 30, 60, 90, 120, 150, and 180.
+    # Scan x from 20-40 KHz (or similar)
+    # For each x, step y from x to 2x
+    # for each x-y, test phase offsets 30, 60, 90, 120, 150, and 180.
+    # Wiring Notes:
+    # Phase shifted Clk1 drives the x-axis since we can only phase shift relative to Clk0.
+    # Clk2 drives the y-axis directly (no phase shift)
     if scan_info.cycle_count == 0:
         print('Initialize test_config_3')
-    # Use config_2 for this test
-    test_config_2(scan_info)
+    f0 = scan_info.f0 = scan_info.base_frequency
+    f1 = scan_info.f1 = scan_info.base_frequency
+    f2 = scan_info.f2 = scan_info.offset_frequency
+    phase1 = scan_info.clock1_phase_offset
+    phase2 = 0
+    # phase offset
+    scan_info.phase_shifter1.set_phase_count240(phase1)
+    scan_info.phase_shifter2.set_phase_count240(phase2)
+    set_clocks(f0, f1 * 240, f2, scan_info.si)
 
 
 def test_config_4(scan_info):
@@ -151,9 +162,9 @@ def test_config_4(scan_info):
     fx = 3 * scan_info.base_frequency
     fy = 3 * scan_info.base_frequency
     fz = scan_info.base_frequency
-    scan_info.fx = fx
-    scan_info.fy = fy
-    scan_info.fz = fz
+    scan_info.f0 = fx
+    scan_info.f1 = fy
+    scan_info.f2 = fz
     set_clocks(fx, fy, fz, scan_info.si)
     scan_info.si.invertOutput(invert=True, channel=1)
 
@@ -184,27 +195,27 @@ def read_sensor1(scan_info):
     x, y, z = scan_info.mag_sensor.readMagneticField()
     sample = MagSample(x, y, z)
     scan_info.do_read_sensor = True  # read again (read_sensor2) when ready interrupt fires
-    sample.fx = scan_info.fx
-    sample.fy = scan_info.fy
-    sample.fz = scan_info.fz
+    sample.f0 = scan_info.f0
+    sample.f1 = scan_info.f1
+    sample.f2 = scan_info.f2
 
 
 def read_sensor2(scan_info):
     # print("read_sensor2")
     x, y, z = scan_info.mag_sensor.readMagneticField()
     sample = MagSample(x, y, z)
-    sample.fx = scan_info.fx  # include frequency with sample
-    sample.fy = scan_info.fy
-    sample.fz = scan_info.fz
+    sample.f0 = scan_info.f0  # include frequency with sample
+    sample.f1 = scan_info.f1
+    sample.f2 = scan_info.f2
     sample.clock1_phase_offset = round(scan_info.clock1_phase_offset * 360 / 240)
     sample.clock2_phase_offset = round(scan_info.clock2_phase_offset * 360 / 240)
     sample.duration = scan_info.duration_now
     scan_info.mag_samples.append(sample)
     if scan_info.cycle_count - scan_info.cycle_last_interval > 10:
         # print(sample)
-        print('fx:%d, fy:%d, fz:%d, clock2_phase:%d, magX:%d, magY:%d, magZ:%d' % (
-            sample.fx, sample.fy, sample.fz,
-            sample.clock2_phase_offset, sample.x, sample.y, sample.z))
+        print('fx:%d, fy:%d, fz:%d, clock1_phase:%d, clock2_phase:%d, magX:%d, magY:%d, magZ:%d' % (
+            sample.f0, sample.f1, sample.f2,
+            sample.clock1_phase_offset, sample.clock2_phase_offset, sample.x, sample.y, sample.z))
         scan_info.cycle_last_interval = scan_info.cycle_count
     # update_parameters(scan_info)
 
@@ -241,21 +252,23 @@ def test_update_parameters_2(scan_info):
 
 
 def test_update_parameters_3(scan_info):
+    # Phase shifted Clk1 drives the x-axis since we can only phase shift relative to Clk0.
+    # Clk2 drives the y-axis directly (no phase shifting)
     scan_info.cycle_count += 1
     while True:
-        scan_info.clock2_phase_offset += 20
-        if scan_info.clock2_phase_offset <= 120:
+        scan_info.clock1_phase_offset += 20
+        if scan_info.clock1_phase_offset <= 120:
             # For this test, we only need to shift 180 degrees (120 counts of 240)
             # to cover every phase relationship between two clock signals
             break
         if scan_info.offset_frequency < 2 * scan_info.base_frequency:
-            scan_info.offset_frequency += 1
-            scan_info.clock2_phase_offset = 0
+            scan_info.offset_frequency += scan_info.frequency_step
+            scan_info.clock1_phase_offset = 0
             break
         if scan_info.base_frequency < scan_info.frequency_end:
             scan_info.base_frequency += scan_info.frequency_step
             scan_info.offset_frequency = scan_info.base_frequency
-            scan_info.clock2_phase_offset = 0
+            scan_info.clock1_phase_offset = 0
             break
         scan_info.run_next_test_cycle = False
         print('Sequence completed')
@@ -273,9 +286,9 @@ def save_samples(scan_info):
     samples = scan_info.mag_samples
     fh = open('mag_profile.csv', 'a')
     for sample in samples:
-        fh.write('%d,%d,%d,%d,%d,%d,%d\n' % (
-            sample.fx, sample.fy, sample.fz,
-            sample.clock2_phase_offset, sample.x, sample.y, sample.z))
+        fh.write('%d,%d,%d,%d,%d,%d,%d,%d\n' % (
+            sample.f0, sample.f1, sample.f2,
+            sample.clock1_phase_offset, sample.clock2_phase_offset, sample.x, sample.y, sample.z))
         # reset samples array to collect more
         scan_info.mag_samples = []
     fh.close()
@@ -313,7 +326,7 @@ def prepare_test_run():
 
     # write column headers to new csv output file
     fh = open('mag_profile.csv', 'a')
-    fh.write("freq_x,freq_y,freq_z,clock2_phase,mag_x,mag_y,mag_z\n")
+    fh.write("freq_x,freq_y,freq_z,clock1_phase,clock2_phase,mag_x,mag_y,mag_z\n")
     fh.close()
 
 
@@ -340,8 +353,8 @@ def run_test_sequence():
     scan_info.test_config = test_config_3
     scan_info.test_update_parameters = test_update_parameters_3
     # Set parameters to resume previous test
-    scan_info.base_frequency = 20001
-    scan_info.offset_frequency = 27104
+    scan_info.base_frequency = 20000
+    scan_info.offset_frequency = 20000
  
     read_events = ReadSensorEvents(scan_info)
     read_events.setup()
@@ -353,6 +366,9 @@ def run_test_sequence():
 
     # cleanup
     read_events.cleanup()
+    scan_info.phase_shifter1.clock_disable()
+    scan_info.phase_shifter2.clock_disable()
+    time.sleep(0.0001)    # allow phase shifter to count clocks off
     scan_info.si.enableOutputs(False)
     turn_off_magnets()
     print("End")
