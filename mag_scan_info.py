@@ -41,17 +41,17 @@ class ScanInfo(object):
         self.do_read_sensor = False   # read magnetic sensor
         self.run_next_test_cycle = True
 
-        self.fx = 0  # frequency on x-axis
-        self.fy = 0  # frequency on y-axis
-        self.fz = 0  # frequency on z-axis
+        self.f0 = 0  # Clk0 frequency
+        self.f1 = 0  # Clk1 frequency
+        self.f2 = 0  # Clk2 frequency
 
 
 class MagSample(object):
     """Magnetic field strenth readling along x, y, and z axis with corresponding frequency information"""
     def __init__(self, x, y, z):
-        self.fx = 0
-        self.fy = 0
-        self.fz = 0
+        self.f0 = 0
+        self.f1 = 0
+        self.f2 = 0
         self.duration = 0
         self.base_frequency = 0
         self.call_method_after_delay = 0
