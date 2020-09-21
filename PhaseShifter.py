@@ -46,35 +46,17 @@ class PhaseShifter(object):
     def set_b(self, value):
         self.i2c.write8(MCP23017_GPIOB, value & 0xFF)
 
-    def set_phase_count240(self, phase_offset, clock_base, clock_output):
-        # Phase shift the corresponding output clock relative to Clk0.
-        # Assume the input clock is set to 240 times Clk0
+    def set_phase_count240(self, phase_offset):
+        # Phase shift the output clock signal relative to Clk0.
+        # The output frequency must match Clk0 since it determines the length of each cycle.
+        # Assumes the input clock is set to 240 times Clk0
         # 240 was chosen because our max 8-bit count is 256.
-        # Assumes Clk1 and Clk2 are close to clock 0 since we only count up to 240.
         # We count the number of 240x pulses to turn the output clock on (A side) and off (B side).
         # The passed in phase shift is in counts of 240.
         turn_on_at = phase_offset % 240
         turn_off_at = (phase_offset + 120) % 240  # +120 is 50% duty cycle of 240
         self.set_a(turn_on_at)
         self.set_b(turn_off_at)
-        # Imagine the desired output clock is 2x Clk0.
-        # In this case counting 240x pulses will only let us turn on or off from 0-180 degrees of Clk0
-        # The solutions is to set the input clock to 120x Clk0
-        # so counting to 240 covers the entire range of Clk0.
-        # As the desired output frequency increases relative to Clk0, we lower the clock multiplier.
-        # The phase_offset parameter still specifies counts of 240.
-        # We can calculate the best fit clock multiplier as
-        clock_multiplier = 240  # default
-        if clock_output != 0:  # clock_output 0 indicates clock is off
-            clock_multiplier = int(float(clock_base) / float(clock_output) * 240)
-            # Debug
-            # print("\nset_phase_count240()")
-            # print('phase_offset: %d, clock_base: %d, clock_output: %d' %(phase_offset, clock_base, clock_output))
-            # print('turn_on_at: %d, turn_off_at: %d' %(turn_on_at, turn_off_at))
-            # print('clock_multiplier: %d' %clock_multiplier)
-        return clock_multiplier
-        # Example: clock_base = 10_000, clock_output = 15_000
-        # clock_multiplier = 160.  15_000 * 160 / 240 == 10_000
 
     def clock_disable(self):
         # Force the clock output to logical low value to turn off magnets.
